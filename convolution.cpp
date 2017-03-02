@@ -90,14 +90,18 @@ int main(int inArgc, char *inArgv[])
     //Lecture de l'image
     //Variables à remplir
     unsigned int lWidth, lHeight; 
-    vector<unsigned char> lImage; //Les pixels bruts
+    vector<unsigned char> lImage;   //Les pixels bruts
+    vector<unsigned char> outImage; //pixels de l'image apres le filtre
+    
+    
     //Appeler lodepng
     decode(lFilename.c_str(), lImage, lWidth, lHeight);
+    outImage.resize((int)lWidth*(int)lHeight*4);
     
     //Variables contenant des indices
     int fy, fx;
     //Variables temporaires pour les canaux de l'image
-    double lR, lG, lB;
+    double lR, lG, lB;    
     for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
     {
         for (int y = lHalfK; y < (int)lHeight - lHalfK; y++)
@@ -110,20 +114,68 @@ int main(int inArgc, char *inArgv[])
                 for (int i = -lHalfK; i <= lHalfK; i++) {
                     fx = i + lHalfK;
                     //R[x + i, y + j] = Im[x + i, y + j].R * Filter[i, j]
-                    lR += double(lImage[(y + j)*lWidth*4 + (x + i)*4]) * lFilter[fx + fy*lK];
+                    lR += double(lImage[(y + j)*lWidth*4 + (x + i)*4    ]) * lFilter[fx + fy*lK];
                     lG += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 1]) * lFilter[fx + fy*lK];
                     lB += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 2]) * lFilter[fx + fy*lK];
+
                 }
             }
+            //protection contre la saturation
+            if(lR<0.) lR=0.; if(lR>255.) lR=255.;
+            if(lG<0.) lG=0.; if(lG>255.) lG=255.;
+            if(lB<0.) lB=0.; if(lB>255.) lB=255.;
             //Placer le résultat dans l'image.
-            lImage[y*lWidth*4 + x*4] = (unsigned char)lR;
-            lImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;
-            lImage[y*lWidth*4 + x*4 + 2] = (unsigned char)lB;
+            outImage[y*lWidth*4 + x*4] = (unsigned char)lR;
+            outImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;
+            outImage[y*lWidth*4 + x*4 + 2] = (unsigned char)lB;
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+        }
+    }
+    
+    //copie les bordures de l'image
+    for(int x = 0; x < lHalfK; x++)
+    {
+        for (int y = 0; y < (int)lHeight; y++)
+        {
+            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+        }
+    }
+    for(int x = (int)lWidth-lHalfK; x < (int)lWidth; x++)
+    {
+        for (int y = 0; y < (int)lHeight; y++)
+        {
+            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+        }
+    }
+    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
+    {
+        for (int y = 0; y < lHalfK; y++)
+        {
+            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+        }
+    }
+    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
+    {
+        for (int y = (int)lHeight - lHalfK; y < (int)lHeight; y++)
+        {
+            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
     
     //Sauvegarde de l'image dans un fichier sortie
-    encode(lOutFilename.c_str(),  lImage, lWidth, lHeight);
+    encode(lOutFilename.c_str(),  outImage, lWidth, lHeight);
 
     cout << "L'image a été filtrée et enregistrée dans " << lOutFilename << " avec succès!" << endl;
 

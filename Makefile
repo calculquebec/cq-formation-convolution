@@ -27,3 +27,8 @@ remake:
 clean:
 	rm $(EXECUTABLE)
 	rm $(OBJECTS)
+
+omp: convolution_omp.o lodepng.o PACC/Tokenizer.o
+	$(CC) $(CFLAGS) -o convolution_omp convolution_omp.o lodepng.o PACC/Tokenizer.o $(LIB_PATHS) $(INCLUDE_PATHS) $(LIBS) 
+
+
