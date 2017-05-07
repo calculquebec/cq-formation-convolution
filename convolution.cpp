@@ -179,7 +179,7 @@ int main(int inArgc, char *inArgv[])
 
     cout << "L'image a été filtrée et enregistrée dans " << lOutFilename << " avec succès!" << endl;
 
-    delete lFilter;
+    delete[] lFilter;
     return 0;
 }
 
