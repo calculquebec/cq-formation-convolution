@@ -1,0 +1,6 @@
+*.o
+convolution
+convolution_omp
+compiler_info.txt
+output.png
+
