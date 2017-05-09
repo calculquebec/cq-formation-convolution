@@ -11,6 +11,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <fstream>
+#include <mpi.h>
 
 #include "Chrono.hpp"
 #include "PACC/Tokenizer.hpp"
@@ -20,7 +21,7 @@ using namespace std;
 //Aide pour le programme
 void usage(char* inName) {
     cout << endl << "Utilisation> " << inName << " fichier_image fichier_noyau [fichier_sortie=output.png]" << endl;
-    exit(1);
+    MPI_Abort(MPI_COMM_WORLD, 1);
 }
 
 //Décoder à partir du disque dans un vecteur de pixels bruts en un seul appel de fonction
@@ -50,6 +51,8 @@ void encode(const char* inFilename, vector<unsigned char>& inImage, unsigned int
 
 int main(int inArgc, char *inArgv[])
 {
+    MPI_Init(&inArgc, &inArgv);
+
     if(inArgc < 3 or inArgc > 4) usage(inArgv[0]);
     string lFilename = inArgv[1];
     string lOutFilename;
@@ -58,12 +61,17 @@ int main(int inArgc, char *inArgv[])
     else
         lOutFilename = "output.png";
 
+    int mpiRank = 0, mpiSize = 1;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpiRank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpiSize);
+
     // Lire le noyau.
     ifstream lConfig;
     lConfig.open(inArgv[2]);
     if (!lConfig.is_open()) {
         cerr << "Le fichier noyau fourni (" << inArgv[2] << ") est invalide." << endl;
-        exit(1);
+        MPI_Abort(MPI_COMM_WORLD, 1);
     }
     
     PACC::Tokenizer lTok(lConfig);
@@ -74,8 +82,10 @@ int main(int inArgc, char *inArgv[])
     
     int lK = atoi(lToken.c_str());
     int lHalfK = lK/2;
-    
-    cout << "Taille du noyau: " <<  lK << endl;
+
+    if (mpiRank == 0) {
+        cout << "Taille du noyau: " <<  lK << endl;
+    }
     
     //Lecture du filtre
     double* lFilter = new double[lK*lK];
@@ -97,14 +107,18 @@ int main(int inArgc, char *inArgv[])
     //Appeler lodepng
     decode(lFilename.c_str(), lImage, lWidth, lHeight);
     outImage.resize((int)lWidth*(int)lHeight*4);
+
+    // Limites du present processus
+    int ymin = lHalfK + (lHeight - 2 * lHalfK) * (mpiRank + 0) / mpiSize;
+    int ymax = lHalfK + (lHeight - 2 * lHalfK) * (mpiRank + 1) / mpiSize;
     
     //Variables contenant des indices
     int fy, fx;
     //Variables temporaires pour les canaux de l'image
     double lR, lG, lB;    
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
+    for (int y = ymin; y < ymax; y++)
     {
-        for (int y = lHalfK; y < (int)lHeight - lHalfK; y++)
+        for (int x = lHalfK; x < (int)lWidth - lHalfK; x++)
         {
             lR = 0.;
             lG = 0.;
@@ -131,11 +145,11 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
-    
-    //copie les bordures de l'image
-    for(int x = 0; x < lHalfK; x++)
+
+    // Copier la bordure gauche du morceau
+    for (int y = ymin; y < ymax; y++)
     {
-        for (int y = 0; y < (int)lHeight; y++)
+        for(int x = 0; x < lHalfK; x++)
         {
             outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
             outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
@@ -143,9 +157,11 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
-    for(int x = (int)lWidth-lHalfK; x < (int)lWidth; x++)
+
+    // Copier la bordure droite du morceau
+    for (int y = ymin; y < ymax; y++)
     {
-        for (int y = 0; y < (int)lHeight; y++)
+        for(int x = (int)lWidth-lHalfK; x < (int)lWidth; x++)
         {
             outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
             outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
@@ -153,33 +169,59 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
-    {
+
+    if (mpiRank == 0) {
+        MPI_Status mstatus;
+
+        // Copier toute la bordure du haut de l'image
         for (int y = 0; y < lHalfK; y++)
         {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+            for(int x = 0; x < (int)lWidth; x++)
+            {
+                outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+                outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+                outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+                outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+            }
         }
-    }
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
-    {
+
+        for (int rank = 1; rank < mpiSize; rank++)
+        {
+            // Limites du present processus
+            ymin = lHalfK + (lHeight - 2 * lHalfK) * (rank + 0) / mpiSize;
+            ymax = lHalfK + (lHeight - 2 * lHalfK) * (rank + 1) / mpiSize;
+            MPI_Recv(&outImage[ymin * lWidth * 4], (ymax - ymin) * lWidth * 4,
+                     MPI_UNSIGNED_CHAR, rank, MPI_ANY_TAG, MPI_COMM_WORLD, &mstatus);
+        }
+
+        // Copier toute la bordure du bas de l'image
         for (int y = (int)lHeight - lHalfK; y < (int)lHeight; y++)
         {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+            for(int x = 0; x < (int)lWidth; x++)
+            {
+                outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
+                outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
+                outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
+                outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
+            }
         }
+    }
+    else
+    {
+        MPI_Send(&outImage[ymin * lWidth * 4], (ymax - ymin) * lWidth * 4,
+                 MPI_UNSIGNED_CHAR, 0, 12345, MPI_COMM_WORLD);
     }
     
     //Sauvegarde de l'image dans un fichier sortie
-    encode(lOutFilename.c_str(),  outImage, lWidth, lHeight);
+    if (mpiRank == 0) {
+        encode(lOutFilename.c_str(),  outImage, lWidth, lHeight);
 
-    cout << "L'image a été filtrée et enregistrée dans " << lOutFilename << " avec succès!" << endl;
+        cout << "L'image a été filtrée et enregistrée dans " << lOutFilename << " avec succès!" << endl;
+    }
 
     delete[] lFilter;
+
+    MPI_Finalize();
     return 0;
 }
 
