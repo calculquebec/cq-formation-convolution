@@ -135,6 +135,7 @@ int main(int inArgc, char *inArgv[])
     }
     
     //copie les bordures de l'image
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int x = 0; x < lHalfK; x++)
     {
         for (int y = 0; y < (int)lHeight; y++)
@@ -145,6 +146,7 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int x = (int)lWidth-lHalfK; x < (int)lWidth; x++)
     {
         for (int y = 0; y < (int)lHeight; y++)
@@ -155,6 +157,7 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
     {
         for (int y = 0; y < lHalfK; y++)
@@ -165,6 +168,7 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
+    #pragma omp parallel for schedule(static) collapse(2)
     for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
     {
         for (int y = (int)lHeight - lHalfK; y < (int)lHeight; y++)
