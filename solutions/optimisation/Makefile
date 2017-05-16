@@ -18,8 +18,7 @@ all: $(EXECUTABLES)
 	$(CC) $(CFLAGS) $(OPT) -c -o $@ $<
 
 clean:
-	rm -f $(EXECUTABLES)
-	rm -f *.o gmon.out
+	rm $(EXECUTABLE) $(OBJECT) gmon.out
 
 convolution: $(COMMON_OBJECTS) convolution.o 
 	$(MAKE_CMD)

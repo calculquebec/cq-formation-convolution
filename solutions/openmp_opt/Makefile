@@ -17,8 +17,7 @@ all: $(EXECUTABLES)
 	$(CC) $(CFLAGS) $(OPT) -c -o $@ $<
 
 clean:
-	rm -f $(EXECUTABLES)
-	rm -f *.o gmon.out
+	rm $(EXECUTABLE) $(OBJECT) gmon.out
 
 convolution_double_openmp: $(COMMON_OBJECTS) convolution_double_openmp.o 
 	$(MAKE_CMD)

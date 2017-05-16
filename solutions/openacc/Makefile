@@ -25,6 +25,5 @@ remake:
 	$(MAKE_CMD)
 
 clean:
-	rm $(EXECUTABLE)
-	rm $(OBJECTS)
+	rm $(EXECUTABLE) $(OBJECT) gmon.out
 
