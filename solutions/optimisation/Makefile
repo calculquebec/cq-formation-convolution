@@ -2,9 +2,9 @@ COMMON_SOURCES= ../../lodepng.cpp ../../PACC/Tokenizer.cpp
 COMMON_OBJECTS=$(COMMON_SOURCES:.cpp=.o)
 
 CC=g++
-CC=icpc
-CFLAGS=-g -std=c++11 -Wall -fopenmp
-CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -xHost -pg -fno-inline-functions
+#CC=icpc
+CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -march=native -pg -fno-inline-functions
+#CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -xHost -pg -fno-inline-functions
 OPT=-O3
 
 EXECUTABLES=1_convolution_func 2_convolution_elim_xy 3_convolution_elim_ij 4_convolution_colorfunc 5_convolution_transpose \
