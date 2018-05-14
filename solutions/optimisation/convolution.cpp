@@ -121,9 +121,9 @@ int main(int inArgc, char *inArgv[])
                 }
             }
             //protection contre la saturation
-            if(lR<0.) lR=0.; if(lR>255.) lR=255.;
-            if(lG<0.) lG=0.; if(lG>255.) lG=255.;
-            if(lB<0.) lB=0.; if(lB>255.) lB=255.;
+            if(lR<0.) {lR=0.;} if(lR>255.) {lR=255.;}
+            if(lG<0.) {lG=0.;} if(lG>255.) {lG=255.;}
+            if(lB<0.) {lB=0.;} if(lB>255.) {lB=255.;}
             //Placer le résultat dans l'image.
             outImage[y*lWidth*4 + x*4] = (unsigned char)lR;
             outImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;

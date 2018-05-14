@@ -63,7 +63,7 @@ unsigned char convolution_one_pixel_color(const double *lIm, const double *lFilt
         }
     }
     //protection contre la saturation
-    if(l<0.) l=0.; if(l>255.) l=255.;
+    if(l<0.) {l=0.;} if(l>255.) {l=255.;}
     //Placer le résultat dans l'image.
     return l;
 }
