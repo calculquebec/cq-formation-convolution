@@ -93,6 +93,7 @@ int main(int inArgc, char *inArgv[])
     vector<unsigned char> vlImage;   //Les pixels bruts
     vector<unsigned char> voutImage; //pixels de l'image apres le filtre
     
+    
     //Appeler lodepng
     decode(lFilename.c_str(), vlImage, lWidth, lHeight);
     voutImage.resize((int)lWidth*(int)lHeight*4);
@@ -100,7 +101,7 @@ int main(int inArgc, char *inArgv[])
     //Variables contenant des indices
     int fy, fx;
     //Variables temporaires pour les canaux de l'image
-    double lR, lG, lB;
+    double lR, lG, lB;    
     unsigned char *__restrict lImage = &vlImage[0];
     unsigned char *__restrict outImage = &voutImage[0];
 
@@ -125,6 +126,7 @@ int main(int inArgc, char *inArgv[])
                     lR += double(lImage[(y + j)*lWidth*4 + (x + i)*4    ]) * lFilter[fx + fy*lK];
                     lG += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 1]) * lFilter[fx + fy*lK];
                     lB += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 2]) * lFilter[fx + fy*lK];
+
                 }
             }
             //protection contre la saturation
@@ -138,7 +140,7 @@ int main(int inArgc, char *inArgv[])
             outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
-
+    
     //copie les bordures de l'image
     #pragma acc loop independent
     for(int x = 0; x < lHalfK; x++)
@@ -190,7 +192,6 @@ int main(int inArgc, char *inArgv[])
     }
     }
     }
-    cout << "Fin du calcul" << endl;
     //Sauvegarde de l'image dans un fichier sortie
     encode(lOutFilename.c_str(),  voutImage, lWidth, lHeight);
 
