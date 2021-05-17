@@ -48,39 +48,6 @@ void encode(const char* inFilename, vector<unsigned char>& inImage, unsigned int
         cout << "Erreur d'encodage " << lError << ": "<< lodepng_error_text(lError) << endl;
 }
 
-void convolution_one_pixel(unsigned char *outImage, const double *dlImage, const double *lFilter,
-                           int lWidth, int lHalfK, int lK, int x, int y, int area)
-{
-    //Variables contenant des indices
-    int fy, fx;
-    //Variables temporaires pour les canaux de l'image
-    double lR, lG, lB;    
-
-    lR = 0.;
-    lG = 0.;
-    lB = 0.;
-    for (int j = -lHalfK; j <= lHalfK; j++) {
-        fy = j + lHalfK;
-        for (int i = -lHalfK; i <= lHalfK; i++) {
-            fx = i + lHalfK;
-            //R[x + i, y + j] = Im[x + i, y + j].R * Filter[i, j]
-            lR += dlImage[(y + j)*lWidth + (x + i)] * lFilter[fx + fy*lK];
-            lG += dlImage[area + (y + j)*lWidth + (x + i)] * lFilter[fx + fy*lK];
-            lB += dlImage[2*area + (y + j)*lWidth + (x + i)] * lFilter[fx + fy*lK];
-
-        }
-    }
-    //protection contre la saturation
-    if(lR<0.) {lR=0.;} if(lR>255.) {lR=255.;}
-    if(lG<0.) {lG=0.;} if(lG>255.) {lG=255.;}
-    if(lB<0.) {lB=0.;} if(lB>255.) {lB=255.;}
-    //Placer le résultat dans l'image.
-    outImage[y*lWidth*4 + x*4] = (unsigned char)lR;
-    outImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;
-    outImage[y*lWidth*4 + x*4 + 2] = (unsigned char)lB;
-    outImage[y*lWidth*4 + x*4 + 3] = dlImage[3*area+y*lWidth + x];
-}
-
 int main(int inArgc, char *inArgv[])
 {
     if(inArgc < 3 or inArgc > 4) usage(inArgv[0]);
@@ -131,17 +98,42 @@ int main(int inArgc, char *inArgv[])
     decode(lFilename.c_str(), lImage, lWidth, lHeight);
     outImage.resize((int)lWidth*(int)lHeight*4);
     
-    double *dlImageT = new double[(int)lWidth*(int)lHeight*4];
-    int area = (int)lWidth*(int)lHeight;
-    for(int i = 0; i < area; i++)
-        for (int k = 0; k < 4; k++)
-            dlImageT[k*area+i] = lImage[i*4+k];
+    double *dlImage = new double[(int)lWidth*(int)lHeight*4];
+    for(int i = 0; i < (int)lWidth*(int)lHeight*4; i++)
+        dlImage[i] = double(lImage[i]);
 
+    //Variables contenant des indices
+    int fy, fx;
+    //Variables temporaires pour les canaux de l'image
+    double lR, lG, lB;    
     for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
     {
         for (int y = lHalfK; y < (int)lHeight - lHalfK; y++)
         {
-            convolution_one_pixel(&outImage[0], &dlImageT[0], lFilter, lWidth, lHalfK, lK, x, y, area);
+            lR = 0.;
+            lG = 0.;
+            lB = 0.;
+            for (int j = -lHalfK; j <= lHalfK; j++) {
+                fy = j + lHalfK;
+		int dlImageoff = (y + j)*lWidth*4 + (x - lHalfK)*4;
+                for (int i = -lHalfK; i <= lHalfK; i++) {
+                    fx = i + lHalfK;
+                    //R[x + i, y + j] = Im[x + i, y + j].R * Filter[i, j]
+                    lR += dlImage[dlImageoff    ] * lFilter[fx + fy*lK];
+                    lG += dlImage[dlImageoff + 1] * lFilter[fx + fy*lK];
+                    lB += dlImage[dlImageoff + 2] * lFilter[fx + fy*lK];
+                    dlImageoff += 4;
+                }
+            }
+            //protection contre la saturation
+            if(lR<0.) {lR=0.;} if(lR>255.) {lR=255.;}
+            if(lG<0.) {lG=0.;} if(lG>255.) {lG=255.;}
+            if(lB<0.) {lB=0.;} if(lB>255.) {lB=255.;}
+            //Placer le résultat dans l'image.
+            outImage[y*lWidth*4 + x*4] = (unsigned char)lR;
+            outImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;
+            outImage[y*lWidth*4 + x*4 + 2] = (unsigned char)lB;
+            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
         }
     }
     
