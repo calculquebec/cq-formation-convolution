@@ -2,11 +2,11 @@ SOURCES= convolution.cpp lodepng.cpp PACC/Tokenizer.cpp
 
 OBJECTS=$(SOURCES:.cpp=.o)
 
-CC=pgc++
+CC=nvc++
 LIBS=
 LIB_PATHS=
 INCLUDE_PATHS=
-CFLAGS=-O3 -g -std=c++11 -fast -Minfo=accel,intensity,ccff -ta=tesla,lineinfo
+CFLAGS=-O3 -g -std=c++11 -fast -Minfo=accel,intensity,ccff -acc -gpu=lineinfo
 
 EXECUTABLE=convolution
 
