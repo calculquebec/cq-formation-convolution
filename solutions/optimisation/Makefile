@@ -8,7 +8,7 @@ CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -march=native -fno-inline-functions
 OPT=-O2 -ftree-vectorize
 PROFILE=
 
-EXECUTABLES=convolution 1_convolution_double 2_convolution_xy_loop 3_convolution_xj_loop 4_convolution_lrgba
+EXECUTABLES=convolution 1_convolution_double 2_convolution_xy_loop 3_convolution_xj_loop 4_convolution_lrgba 5_convolution_omp_simd
 
 MAKE_CMD=$(CC) $(CFLAGS) $(OPT) $(PROFILE) -o $@ $^
 
@@ -33,4 +33,7 @@ convolution: $(COMMON_OBJECTS) convolution.o
 	$(MAKE_CMD)
 
 4_convolution_lrgba: $(COMMON_OBJECTS) 4_convolution_lrgba.o
+	$(MAKE_CMD)
+
+5_convolution_omp_simd: $(COMMON_OBJECTS) 5_convolution_omp_simd.o
 	$(MAKE_CMD)
