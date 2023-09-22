@@ -20,12 +20,8 @@ $(EXECUTABLE): $(OBJECTS)
 .cpp.o:
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-remake:
-	rm $(EXECUTABLE)
-	$(MAKE_CMD)
-
 clean:
-	rm $(EXECUTABLE) $(OBJECTS)
+	rm -f $(EXECUTABLE) $(OBJECTS)
 
 omp: convolution_omp.o lodepng.o PACC/Tokenizer.o
 	$(CC) $(CFLAGS) -o convolution_omp convolution_omp.o lodepng.o PACC/Tokenizer.o $(LIB_PATHS) $(INCLUDE_PATHS) $(LIBS) 
