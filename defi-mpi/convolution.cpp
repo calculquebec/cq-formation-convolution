@@ -134,19 +134,19 @@ private:
 void prod_conv(LePNG & rgba, const Noyau & filtre)
 {
     // Dimensions originales
-    const auto largeur = rgba.largeur();
-    const auto hauteur = rgba.hauteur();
+    const int largeur = rgba.largeur();
+    const int hauteur = rgba.hauteur();
     std::cout << "Dimensions de l'image originale : " << largeur
         << " x " << hauteur << std::endl;
 
     // Calculer la marge autour de l'image
-    const auto taille_filtre = filtre.largeur();
+    const int taille_filtre = filtre.largeur();
     const int marge = (int)taille_filtre / 2;  // Type int (signé) nécessaire
     std::cout << "Taille du filtre : " << taille_filtre << std::endl;
     std::cout << "  Marge réelle :  " << marge << std::endl;
 
-    const auto marge_gauche = (marge + 15) & ~15;  // Alignée sur 64o=16*4o
-    const auto stride = marge_gauche + ((largeur + marge + 15) & ~15);
+    const int marge_gauche = (marge + 15) & ~15;  // Alignée sur 64o=16*4o
+    const int stride = marge_gauche + ((largeur + marge + 15) & ~15);
     std::cout << "  Marge alignée : " << marge_gauche << std::endl;
     std::cout << "  Largeur totale alignée : " << stride
         << " (= " << marge_gauche << " + " << largeur << " + "
@@ -156,8 +156,8 @@ void prod_conv(LePNG & rgba, const Noyau & filtre)
     im_temp.redimensionner(stride, marge + hauteur + marge);
 
     // Remplir les marges du haut et du bas
-    for (auto i = 0; i < marge; ++i) {
-        for (auto j = 0; j < largeur; ++j) {
+    for (int i = 0; i < marge; ++i) {
+        for (int j = 0; j < largeur; ++j) {
             im_temp[(marge - 1 - i) * stride + (marge_gauche + j)] =
                 rgba[i * largeur + j];
             im_temp[(marge + hauteur + i) * stride + (marge_gauche + j)] =
@@ -166,16 +166,16 @@ void prod_conv(LePNG & rgba, const Noyau & filtre)
     }
 
     // Copier l'image originale
-    for (auto i = 0; i < hauteur; ++i) {
-        for (auto j = 0; j < largeur; ++j) {
+    for (int i = 0; i < hauteur; ++i) {
+        for (int j = 0; j < largeur; ++j) {
             im_temp[(marge + i) * stride + (marge_gauche + j)] =
                 rgba[i * largeur + j];
         }
     }
 
     // Remplir les marges de gauche et de droite
-    for (auto i = 0; i < im_temp.hauteur(); ++i) {
-        for (auto j = 0; j < marge; ++j) {
+    for (int i = 0; i < im_temp.hauteur(); ++i) {
+        for (int j = 0; j < marge; ++j) {
             im_temp[i * stride + (marge_gauche - 1 - j)] =
                 im_temp[i * stride + (marge_gauche + j)];
             im_temp[i * stride + (marge_gauche + largeur + j)] =
@@ -186,17 +186,17 @@ void prod_conv(LePNG & rgba, const Noyau & filtre)
     std::cout << "Filtrage en cours ..." << std::endl;
 
     // Prod_conv[i, j] = Sum_ii(Sum_jj(Im[i+ii, j+jj] * Filtre[-ii, -jj]))
-    for (auto i = 0; i < hauteur; ++i) {
-        for (auto j = 0; j < largeur; ++j) {
+    for (int i = 0; i < hauteur; ++i) {
+        for (int j = 0; j < largeur; ++j) {
             double r = 0.;
             double g = 0.;
             double b = 0.;
 
             for (int ii = -marge; ii <= marge; ++ii) {
                 for (int jj = -marge; jj <= marge; ++jj) {
-                    const size_t index_im =
+                    const LePNG::size_type index_im =
                         (marge + i + ii) * stride + (marge_gauche + j + jj);
-                    const size_t index_filt =
+                    const Noyau::size_type index_filt =
                         (marge - ii) * taille_filtre + (marge - jj);
 
                     r += (double)im_temp[index_im].r * filtre[index_filt];
