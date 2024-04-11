@@ -5,7 +5,7 @@ import numpy as np
 import sys
 
 
-def charger_noyau(nom_fichier):
+def charger_noyau(nom_fichier: str):
     """Chargement du noyau à partir du fichier texte de format :
         taille
         valeur_0_0 valeur_0_1 ... valeur_0_taille-1
@@ -32,15 +32,22 @@ def charger_noyau(nom_fichier):
     return noyau
 
 
-def prod_conv(rgba, filtre):
+def prod_conv(image, filtre, val_min: int = 0, val_max: int = 255):
     """Produit de convolution - écrase l'image originale
+
+    Arguments:
+        image - numpy.ndarray, dtype=float64, matrice 3D
+        filtre - numpy.ndarray, dtype=float64, matrice carrée
+        val_min - tronquer les valeurs faibles à val_min (0 par défaut)
+        val_max - tronquer les valeurs élevées à val_max (255 par défaut)
 
     Référence:
     https://fr.wikipedia.org/wiki/Produit_de_convolution
     """
 
     # Préparer le filtre pour le produit de convolution
-    filtre = filtre[::-1, ::-1].reshape(filtre.shape + (1,)).copy()
+    assert filtre.shape[0] == filtre.shape[1], "Le filtre n'est pas carré."
+    filtre = filtre[::-1, ::-1].copy()
 
     # Calculer les marges autour de l'image
     taille_filtre = filtre.shape[0]
@@ -53,13 +60,13 @@ def prod_conv(rgba, filtre):
     print('  Marge alignée :', marge_gauche)
 
     # Créer une image temporaire avec les marges
-    hauteur, largeur = rgba.shape[:2]
+    hauteur, largeur, canaux = image.shape
     stride = marge_gauche + ((largeur + marge + 15) & ~15)
     im_temp = np.ndarray(
-        (marge + hauteur + marge, stride, 3), dtype=rgba.dtype)
+        (marge + hauteur + marge, stride, canaux), dtype=image.dtype)
 
-    print("Dimensions de l'image originale :", rgba.shape)
-    print('  Strides (octets) :', rgba.strides)
+    print("Dimensions de l'image originale :", image.shape)
+    print('  Strides (octets) :', image.strides)
     print(f'  Largeur totale alignée : {stride} (= {marge_gauche} +' +
         f' {largeur} + {stride - (marge_gauche + largeur)})')
     print('Dimensions modifiées :', im_temp.shape)
@@ -67,15 +74,14 @@ def prod_conv(rgba, filtre):
 
     # Remplir la marge du haut avec effet miroir vertical
     im_temp[marge - 1::-1, marge_gauche:marge_gauche + largeur, :] = \
-        rgba[:marge, :, :3]
+        image[:marge, :, :]
 
-    # Copier l'image originale
-    im_temp[marge:-marge, marge_gauche:marge_gauche + largeur, :] = \
-        rgba[:, :, :3]
+    # Copier l'image originale en tenant compte des marges
+    im_temp[marge:-marge, marge_gauche:marge_gauche + largeur, :] = image
 
     # Remplir la marge du bas avec effet miroir vertical
     im_temp[-1:-1 - marge:-1, marge_gauche:marge_gauche + largeur, :] = \
-        rgba[-marge:, :, :3]
+        image[-marge:, :, :]
 
     # Remplir les marges de gauche et de droite
     im_temp[:, marge_gauche - 1:marge_gauche - 1 - marge:-1, :] = \
@@ -89,11 +95,12 @@ def prod_conv(rgba, filtre):
     for i in range(hauteur):
         for j in range(largeur):
             ii, jj = i + marge, j + marge_gauche
-            produits = np.multiply(
-                im_temp[ii-marge:ii+marge + 1, jj-marge:jj+marge + 1, :],
-                filtre)
-            pixel = np.sum(produits, axis=(0, 1))
-            rgba[i, j, :3] = pixel.clip(0, 255).astype(rgba.dtype)
+            for k in range(canaux):
+                image[i, j, k] = np.vdot(
+                    im_temp[ii-marge:ii+marge + 1, jj-marge:jj+marge + 1, k],
+                    filtre)
+
+    image.clip(val_min, val_max, out=image)
 
 
 def main():
@@ -106,8 +113,8 @@ def main():
                  ' image.png fichier_noyau [resultat.png]')
 
     try:
-        # Charger l'image originale
-        png = np.array(Image.open(sys.argv[1]))
+        # Charger l'image originale en RGB
+        image = np.array(Image.open(sys.argv[1]))[:, :, :3].astype(float)
 
         # Charger le noyau de convolution
         noyau = charger_noyau(sys.argv[2])
@@ -115,11 +122,11 @@ def main():
         sys.exit(f'Erreur: {e}')
 
     # Calcul principal
-    prod_conv(png, noyau)
+    prod_conv(image, noyau)
 
     try:
         # Enregistrer l'image résultante
-        Image.fromarray(png, 'RGBA').save("resultat.png")
+        Image.fromarray(image.astype(np.uint8), 'RGB').save("resultat.png")
     except Exception as e:
         sys.exit(f'Erreur: {e}')
 
