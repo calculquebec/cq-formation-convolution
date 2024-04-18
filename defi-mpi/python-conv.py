@@ -112,12 +112,16 @@ def main():
         sys.exit(f'Utilisation: {sys.argv[0]}' +
                  ' image.png fichier_noyau [resultat.png]')
 
+    fichier_image = sys.argv[1]
+    fichier_noyau = sys.argv[2]
+    fichier_resultat = sys.argv[3] if len(sys.argv) > 3 else 'resultat.png'
+
     try:
         # Charger l'image originale en RGB
-        image = np.array(Image.open(sys.argv[1]))[:, :, :3].astype(float)
+        image = np.array(Image.open(fichier_image))[:, :, :3].astype(float)
 
         # Charger le noyau de convolution
-        noyau = charger_noyau(sys.argv[2])
+        noyau = charger_noyau(fichier_noyau)
     except Exception as e:
         sys.exit(f'Erreur: {e}')
 
@@ -126,7 +130,7 @@ def main():
 
     try:
         # Enregistrer l'image résultante
-        Image.fromarray(image.astype(np.uint8), 'RGB').save("resultat.png")
+        Image.fromarray(image.astype(np.uint8), 'RGB').save(fichier_resultat)
     except Exception as e:
         sys.exit(f'Erreur: {e}')
 
