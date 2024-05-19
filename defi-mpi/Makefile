@@ -1,7 +1,7 @@
 EXECUTABLE=convolution
 
 CC=g++
-CFLAGS=-O3 -std=c++11
+CFLAGS=-O3 -std=c++11 -Wall
 DEBUG=-g -Wall
 LIBS=-lpng
 
