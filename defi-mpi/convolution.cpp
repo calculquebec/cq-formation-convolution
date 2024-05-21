@@ -131,7 +131,7 @@ private:
  * Produit de convolution - écrase l'image originale
  * https://fr.wikipedia.org/wiki/Produit_de_convolution
  */
-void prod_conv(LePNG & rgba, const Noyau & filtre)
+static void prod_conv(LePNG & rgba, const Noyau & filtre)
 {
     // Dimensions originales
     const int largeur = rgba.largeur();
