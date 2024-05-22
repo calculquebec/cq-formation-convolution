@@ -55,44 +55,42 @@ def prod_conv(image, filtre, comm, val_min: int = 0, val_max: int = 255):
     # Calculer les marges autour de l'image
     taille_filtre = filtre.shape[0]
     marge = taille_filtre // 2  # Division entière
-    marge_gauche = (marge + 15) & ~15  # Alignée sur 64o=16*4o
 
     if rank == 0:
         print('Taille du filtre :', filtre.shape)
         print('  Strides (octets) :', filtre.strides)
-        print('  Marge réelle : ', marge)
-        print('  Marge alignée :', marge_gauche)
+        print('  Marge : ', marge)
 
     # Créer une image temporaire avec les marges
     hauteur, largeur, canaux = image.shape
-    stride = marge_gauche + ((largeur + marge + 15) & ~15)
+    stride = marge + largeur + marge
     im_temp = np.ndarray(
         (marge + hauteur + marge, stride, canaux), dtype=image.dtype)
 
     if rank == 0:
         print("Dimensions de l'image originale :", image.shape)
         print('  Strides (octets) :', image.strides)
-        print(f'  Largeur totale alignée : {stride} (= {marge_gauche} +' +
-            f' {largeur} + {stride - (marge_gauche + largeur)})')
+        print(f'  Largeur totale : {stride} (= {marge} +' +
+            f' {largeur} + {stride - (marge + largeur)})')
         print('Dimensions modifiées :', im_temp.shape)
         print('  Strides (octets) :', im_temp.strides)
 
     # Remplir la marge du haut avec effet miroir vertical
-    im_temp[marge - 1::-1, marge_gauche:marge_gauche + largeur, :] = \
+    im_temp[marge - 1::-1, marge:marge + largeur, :] = \
         image[:marge, :, :]
 
     # Copier l'image originale en tenant compte des marges
-    im_temp[marge:-marge, marge_gauche:marge_gauche + largeur, :] = image
+    im_temp[marge:-marge, marge:marge + largeur, :] = image
 
     # Remplir la marge du bas avec effet miroir vertical
-    im_temp[-1:-1 - marge:-1, marge_gauche:marge_gauche + largeur, :] = \
+    im_temp[-1:-1 - marge:-1, marge:marge + largeur, :] = \
         image[-marge:, :, :]
 
     # Remplir les marges de gauche et de droite
-    im_temp[:, marge_gauche - 1:marge_gauche - 1 - marge:-1, :] = \
-        im_temp[:, marge_gauche:marge_gauche + marge, :]
-    im_temp[:, marge_gauche + largeur:marge_gauche + largeur + marge, :] = \
-        im_temp[:, marge_gauche+largeur-1:marge_gauche+largeur-1 - marge:-1, :]
+    im_temp[:, marge - 1:0:-1, :] = \
+        im_temp[:, marge:marge + marge - 1, :]
+    im_temp[:, marge + largeur:marge + largeur + marge, :] = \
+        im_temp[:, marge+largeur-1:largeur-1:-1, :]
 
     if rank == 0:
         print('Filtrage en cours ...')
@@ -100,10 +98,10 @@ def prod_conv(image, filtre, comm, val_min: int = 0, val_max: int = 255):
     debut = rank * hauteur // size
     fin = (rank + 1) * hauteur // size
 
-    # Prod_conv[i, j] = Sum(Im[i+marge ±marge, j+marge_gauche ±marge] * Filtre)
+    # Prod_conv[i, j] = Sum(Im[i+marge ±marge, j+marge ±marge] * Filtre)
     for i in range(debut, fin):
         for j in range(largeur):
-            ii, jj = i + marge, j + marge_gauche
+            ii, jj = i + marge, j + marge
             for k in range(canaux):
                 image[i, j, k] = np.vdot(
                     im_temp[ii-marge:ii+marge + 1, jj-marge:jj+marge + 1, k],
