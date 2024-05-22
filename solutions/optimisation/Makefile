@@ -1,16 +1,14 @@
-COMMON_SOURCES= ../../lodepng.cpp ../../PACC/Tokenizer.cpp
-COMMON_OBJECTS=$(COMMON_SOURCES:.cpp=.o)
-
 CC=g++
 #CC=icpc
 CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -march=native -fno-inline-functions
 #CFLAGS=-I../.. -g -std=c++11 -Wall -fopenmp -xHost -fno-inline-functions
 OPT=-O2 -ftree-vectorize
 PROFILE=
+LIBS=-lpng
 
-EXECUTABLES=convolution 1_convolution_double 2_convolution_xy_loop 3_convolution_xj_loop 4_convolution_lrgba 5_convolution_omp_simd
+EXECUTABLES=convolution 1_convolution_double 2_convolution_soa 3_convolution_omp_simd
 
-MAKE_CMD=$(CC) $(CFLAGS) $(OPT) $(PROFILE) -o $@ $^
+MAKE_CMD=$(CC) $(CFLAGS) $(OPT) $(PROFILE) $(LIBS) -o $@ $^
 
 all: $(EXECUTABLES)
 
@@ -20,20 +18,14 @@ all: $(EXECUTABLES)
 clean:
 	rm -f $(EXECUTABLE) *.o gmon.out
 
-convolution: $(COMMON_OBJECTS) convolution.o 
+convolution: convolution.o
 	$(MAKE_CMD)
 
-1_convolution_double: $(COMMON_OBJECTS) 1_convolution_double.o
+1_convolution_double: 1_convolution_double.o
 	$(MAKE_CMD)
 
-2_convolution_xy_loop: $(COMMON_OBJECTS) 2_convolution_xy_loop.o
+2_convolution_soa: 2_convolution_soa.o
 	$(MAKE_CMD)
 
-3_convolution_xj_loop: $(COMMON_OBJECTS) 3_convolution_xj_loop.o
-	$(MAKE_CMD)
-
-4_convolution_lrgba: $(COMMON_OBJECTS) 4_convolution_lrgba.o
-	$(MAKE_CMD)
-
-5_convolution_omp_simd: $(COMMON_OBJECTS) 5_convolution_omp_simd.o
+3_convolution_omp_simd: 3_convolution_omp_simd.o
 	$(MAKE_CMD)

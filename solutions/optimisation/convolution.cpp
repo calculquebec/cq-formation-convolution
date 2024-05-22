@@ -1,185 +1,274 @@
-//
-//  tp2.cpp
-//  Exemple de convolution d'image avec lodepng
-//
-//  Créé par Julien-Charles Lévesque
-//  Copyright 2015 Université Laval. Tous droits réservés.
-//
-
-
-#include "lodepng.h"
-#include <iostream>
-#include <stdlib.h>
+#include <cstring>
 #include <fstream>
+#include <iostream>
+#include <png.h>
+#include <string>
+#include <vector>
 
-#include "Chrono.hpp"
-#include "PACC/Tokenizer.hpp"
 
-using namespace std;
+/**
+ * Enregistrement de 4 octets, un par canal de pixel RGBA
+ */
+typedef struct {
+    png_byte r;  // Rouge
+    png_byte g;  // Vert
+    png_byte b;  // Bleu
+    png_byte a;  // Alpha
+} png_rgba;
 
-//Aide pour le programme
-void usage(char* inName) {
-    cout << endl << "Utilisation> " << inName << " fichier_image fichier_noyau [fichier_sortie=output.png]" << endl;
-    exit(1);
-}
 
-//Décoder à partir du disque dans un vecteur de pixels bruts en un seul appel de fonction
-void decode(const char* inFilename,  vector<unsigned char>& outImage, unsigned int& outWidth, unsigned int& outHeight)
+/**
+ * Classe facilitant la lecture-écriture (Le) de fichiers PNG en RGBA
+ * https://sourceforge.net/p/libpng/code/ci/master/tree/example.c
+ * https://sourceforge.net/p/libpng/code/ci/master/tree/png.h
+ */
+class LePNG: public std::vector<png_rgba>
 {
-    //Décoder
-    unsigned int lError = lodepng::decode(outImage, outWidth, outHeight, inFilename);
+public:
+    LePNG() {
+        memset(&entete, 0, sizeof entete);
 
-    //Montrer l'erreur s'il y en a une.
-    if(lError) 
-        cout << "Erreur de décodage " << lError << ": " << lodepng_error_text(lError) << endl;
-
-    //Les pixels sont maintenant dans le vecteur outImage, 4 octets par pixel, organisés RGBARGBA...
-}
-
-//Encoder à partir de pixels bruts sur le disque en un seul appel de fonction
-//L'argument inImage contient inWidth * inHeight pixels RGBA ou inWidth * inHeight * 4 octets
-void encode(const char* inFilename, vector<unsigned char>& inImage, unsigned int inWidth, unsigned int inHeight)
-{
-    //Encoder l'image
-    unsigned lError = lodepng::encode(inFilename, inImage, inWidth, inHeight);
-
-    //Montrer l'erreur s'il y en a une.
-    if(lError)
-        cout << "Erreur d'encodage " << lError << ": "<< lodepng_error_text(lError) << endl;
-}
-
-int main(int inArgc, char *inArgv[])
-{
-    if(inArgc < 3 or inArgc > 4) usage(inArgv[0]);
-    string lFilename = inArgv[1];
-    string lOutFilename;
-    if (inArgc == 4)
-        lOutFilename = inArgv[3];
-    else
-        lOutFilename = "output.png";
-
-    // Lire le noyau.
-    ifstream lConfig;
-    lConfig.open(inArgv[2]);
-    if (!lConfig.is_open()) {
-        cerr << "Le fichier noyau fourni (" << inArgv[2] << ") est invalide." << endl;
-        exit(1);
+        entete.format = PNG_FORMAT_RGBA;
+        entete.version = PNG_IMAGE_VERSION;
     }
-    
-    PACC::Tokenizer lTok(lConfig);
-    lTok.setDelimiters(" \n","");
-        
-    string lToken;
-    lTok.getNextToken(lToken);
-    
-    int lK = atoi(lToken.c_str());
-    int lHalfK = lK/2;
-    
-    cout << "Taille du noyau: " <<  lK << endl;
-    
-    //Lecture du filtre
-    double* lFilter = new double[lK*lK];
-        
-    for (int i = 0; i < lK; i++) {
-        for (int j = 0; j < lK; j++) {
-            lTok.getNextToken(lToken);
-            lFilter[i*lK+j] = atof(lToken.c_str());
+
+    virtual ~LePNG() {
+        png_image_free(&entete);
+    }
+
+    /**
+     * Modifier les dimensions de l'image
+     */
+    void redimensionner(png_uint_32 largeur, png_uint_32 hauteur) {
+        entete.width = largeur;
+        entete.height = hauteur;
+
+        resize(entete.width * entete.height);
+    }
+
+    /**
+     * Charger une image d'un fichier PNG - 4 canaux (Red, Green, Blue, Alpha)
+     */
+    void charger(const std::string & nom_fichier) {
+        if (!png_image_begin_read_from_file(&entete, nom_fichier.c_str()))
+            throw nom_fichier + " - " + entete.message;
+
+        resize(entete.width * entete.height);
+
+        if (!png_image_finish_read(&entete, NULL, data(), 0, NULL))
+            throw nom_fichier + " - " + entete.message;
+    }
+
+    /**
+     * Enregistrer le résultat dans un fichier PNG
+     */
+    void enregistrer(const std::string & nom_fichier) {
+        if (!png_image_write_to_file(
+                &entete, nom_fichier.c_str(), 0, data(), 0, NULL)) {
+            throw nom_fichier + " - " + entete.message;
         }
     }
 
-    //Lecture de l'image
-    //Variables à remplir
-    unsigned int lWidth, lHeight; 
-    vector<unsigned char> lImage;   //Les pixels bruts
-    vector<unsigned char> outImage; //pixels de l'image apres le filtre
-    
-    
-    //Appeler lodepng
-    decode(lFilename.c_str(), lImage, lWidth, lHeight);
-    outImage.resize((int)lWidth*(int)lHeight*4);
-    
-    //Variables contenant des indices
-    int fy, fx;
-    //Variables temporaires pour les canaux de l'image
-    double lR, lG, lB;    
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
-    {
-        for (int y = lHalfK; y < (int)lHeight - lHalfK; y++)
-        {
-            lR = 0.;
-            lG = 0.;
-            lB = 0.;
-            for (int j = -lHalfK; j <= lHalfK; j++) {
-                fy = j + lHalfK;
-                for (int i = -lHalfK; i <= lHalfK; i++) {
-                    fx = i + lHalfK;
-                    //R[x + i, y + j] = Im[x + i, y + j].R * Filter[i, j]
-                    lR += double(lImage[(y + j)*lWidth*4 + (x + i)*4    ]) * lFilter[fx + fy*lK];
-                    lG += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 1]) * lFilter[fx + fy*lK];
-                    lB += double(lImage[(y + j)*lWidth*4 + (x + i)*4 + 2]) * lFilter[fx + fy*lK];
+    inline png_uint_32 largeur() const { return entete.width; }
+    inline png_uint_32 hauteur() const { return entete.height; }
 
+private:
+    png_image entete;
+};
+
+
+/**
+ * Classe facilitant la lecture d'un noyau de convolution (filtre) carré
+ */
+class Noyau: public std::vector<double>
+{
+public:
+    Noyau(): taille(0) {}
+
+    /**
+     * Chargement du noyau à partir du fichier texte de format :
+     *
+     * taille
+     * valeur_0_0 valeur_0_1 ... valeur_0_taille-1
+     * ...
+     * valeur_taille-1_0 ... valeur_taille-1_taille-1
+     */
+    void charger(const std::string & nom_fichier) {
+        std::ifstream ifs;
+        ifs.open(nom_fichier.c_str());
+
+        if (!ifs.is_open())
+            throw nom_fichier + " - n'a pas pu être ouvert.";
+
+        ifs >> taille;
+
+        if ((taille < 3) || (255 < taille))
+            throw nom_fichier + " - taille de noyau invalide (<3 ou >255).";
+        if ((taille & 1) == 0)
+            throw nom_fichier + " - taille de noyau invalide (mod 2 = 0).";
+
+        resize(taille * taille);
+        auto itValeur = begin();
+
+        do {
+            ifs >> *itValeur++;
+        } while (ifs.good() && (itValeur != end()));
+
+        if (ifs.fail() || (itValeur != end()))
+            throw nom_fichier + " - il manque des valeurs dans le fichier.";
+
+        ifs.close();
+    }
+
+    inline size_type largeur() const { return taille; }
+
+private:
+    size_type taille;
+};
+
+
+/**
+ * Produit de convolution - écrase l'image originale
+ * https://fr.wikipedia.org/wiki/Produit_de_convolution
+ */
+static void prod_conv(LePNG & rgba, const Noyau & filtre)
+{
+    // Dimensions originales
+    const int largeur = rgba.largeur();
+    const int hauteur = rgba.hauteur();
+    std::cout << "Dimensions de l'image originale : " << largeur
+        << " x " << hauteur << std::endl;
+
+    // Calculer la marge autour de l'image
+    const int taille_filtre = filtre.largeur();
+    const int marge = (int)taille_filtre / 2;  // Type int (signé) nécessaire
+    std::cout << "Taille du filtre : " << taille_filtre << std::endl;
+    std::cout << "  Marge réelle :  " << marge << std::endl;
+
+    const int marge_gauche = (marge + 15) & ~15;  // Alignée sur 64o=16*4o
+    const int stride = marge_gauche + ((largeur + marge + 15) & ~15);
+    std::cout << "  Marge alignée : " << marge_gauche << std::endl;
+    std::cout << "  Largeur totale alignée : " << stride
+        << " (= " << marge_gauche << " + " << largeur << " + "
+        << stride - (marge_gauche + largeur) << ")" << std::endl;
+
+    LePNG im_temp;
+    im_temp.redimensionner(stride, marge + hauteur + marge);
+
+    // Remplir les marges du haut et du bas
+    for (int i = 0; i < marge; ++i) {
+        for (int j = 0; j < largeur; ++j) {
+            im_temp[(marge - 1 - i) * stride + (marge_gauche + j)] =
+                rgba[i * largeur + j];
+            im_temp[(marge + hauteur + i) * stride + (marge_gauche + j)] =
+                rgba[(hauteur - 1 - i) * largeur + j];
+        }
+    }
+
+    // Copier l'image originale
+    for (int i = 0; i < hauteur; ++i) {
+        for (int j = 0; j < largeur; ++j) {
+            im_temp[(marge + i) * stride + (marge_gauche + j)] =
+                rgba[i * largeur + j];
+        }
+    }
+
+    // Remplir les marges de gauche et de droite
+    for (png_uint_32 i = 0; i < im_temp.hauteur(); ++i) {
+        for (int j = 0; j < marge; ++j) {
+            im_temp[i * stride + (marge_gauche - 1 - j)] =
+                im_temp[i * stride + (marge_gauche + j)];
+            im_temp[i * stride + (marge_gauche + largeur + j)] =
+                im_temp[i * stride + (marge_gauche + largeur - 1 - j)];
+        }
+    }
+
+    std::cout << "Filtrage en cours ..." << std::endl;
+
+    // Prod_conv[i, j] = Sum_ii(Sum_jj(Im[i+ii, j+jj] * Filtre[-ii, -jj]))
+    for (int i = 0; i < hauteur; ++i) {
+        for (int j = 0; j < largeur; ++j) {
+            double r = 0.;
+            double g = 0.;
+            double b = 0.;
+
+            for (int ii = -marge; ii <= marge; ++ii) {
+                for (int jj = -marge; jj <= marge; ++jj) {
+                    const LePNG::size_type index_im =
+                        (marge + i + ii) * stride + (marge_gauche + j + jj);
+                    const Noyau::size_type index_filt =
+                        (marge - ii) * taille_filtre + (marge - jj);
+
+                    r += (double)im_temp[index_im].r * filtre[index_filt];
+                    g += (double)im_temp[index_im].g * filtre[index_filt];
+                    b += (double)im_temp[index_im].b * filtre[index_filt];
                 }
             }
-            //protection contre la saturation
-            if(lR<0.) {lR=0.;} if(lR>255.) {lR=255.;}
-            if(lG<0.) {lG=0.;} if(lG>255.) {lG=255.;}
-            if(lB<0.) {lB=0.;} if(lB>255.) {lB=255.;}
-            //Placer le résultat dans l'image.
-            outImage[y*lWidth*4 + x*4] = (unsigned char)lR;
-            outImage[y*lWidth*4 + x*4 + 1] = (unsigned char)lG;
-            outImage[y*lWidth*4 + x*4 + 2] = (unsigned char)lB;
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
-        }
-    }
-    
-    //copie les bordures de l'image
-    for(int x = 0; x < lHalfK; x++)
-    {
-        for (int y = 0; y < (int)lHeight; y++)
-        {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
-        }
-    }
-    for(int x = (int)lWidth-lHalfK; x < (int)lWidth; x++)
-    {
-        for (int y = 0; y < (int)lHeight; y++)
-        {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
-        }
-    }
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
-    {
-        for (int y = 0; y < lHalfK; y++)
-        {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
-        }
-    }
-    for(int x = lHalfK; x < (int)lWidth - lHalfK; x++)
-    {
-        for (int y = (int)lHeight - lHalfK; y < (int)lHeight; y++)
-        {
-            outImage[y*lWidth*4 + x*4] = lImage[y*lWidth*4 + x*4];
-            outImage[y*lWidth*4 + x*4 + 1] = lImage[y*lWidth*4 + x*4 + 1];
-            outImage[y*lWidth*4 + x*4 + 2] = lImage[y*lWidth*4 + x*4 + 2];
-            outImage[y*lWidth*4 + x*4 + 3] = lImage[y*lWidth*4 + x*4 + 3];
-        }
-    }
-    
-    //Sauvegarde de l'image dans un fichier sortie
-    encode(lOutFilename.c_str(),  outImage, lWidth, lHeight);
 
-    cout << "L'image a été filtrée et enregistrée dans " << lOutFilename << " avec succès!" << endl;
+            // Protection contre la saturation
+            if (r < 0.) { r = 0.; } if (r > 255.) { r = 255.; }
+            if (g < 0.) { g = 0.; } if (g > 255.) { g = 255.; }
+            if (b < 0.) { b = 0.; } if (b > 255.) { b = 255.; }
 
-    delete[] lFilter;
+            // Placer le résultat dans l'image originale
+            rgba[i * largeur + j].r = r;
+            rgba[i * largeur + j].g = g;
+            rgba[i * largeur + j].b = b;
+        }
+    }
+}
+
+
+/**
+ * Programme principal
+ */
+int main(int argc, char *argv[])
+{
+    LePNG png;
+    Noyau noyau;
+
+    if (argc < 3) {
+        std::cerr << "Utilisation: " << argv[0]
+            << " image.png fichier_noyau [resultat.png]" << std::endl;
+        return 1;
+    }
+
+    try {
+        // Charger l'image originale
+        std::string nom_fichier_png(argv[1]);
+        png.charger(nom_fichier_png);
+    }
+    catch (const std::string message) {
+        std::cerr << "Erreur: " << message << std::endl;
+        return 2;
+    }
+
+    try {
+        // Charger le noyau de convolution
+        std::string nom_fichier_noyau(argv[2]);
+        noyau.charger(nom_fichier_noyau);
+    }
+    catch (const std::string message) {
+        std::cerr << "Erreur: " << message << std::endl;
+        return 3;
+    }
+
+    // Calcul principal
+    prod_conv(png, noyau);
+
+    try {
+        // Enregistrer le résultat
+        std::string fichier_resultat = (argc >= 4) ? argv[3] : "resultat.png";
+        png.enregistrer(fichier_resultat);
+
+        std::cout << "L'image a été filtrée et enregistrée dans "
+            << fichier_resultat << " avec succès!" << std::endl;
+    }
+    catch (const std::string message) {
+        std::cerr << "Erreur: " << message << std::endl;
+        return 4;
+    }
+
     return 0;
 }
 

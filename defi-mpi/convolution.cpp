@@ -131,7 +131,7 @@ private:
  * Produit de convolution - écrase l'image originale
  * https://fr.wikipedia.org/wiki/Produit_de_convolution
  */
-void prod_conv(LePNG & rgba, const Noyau & filtre)
+static void prod_conv(LePNG & rgba, const Noyau & filtre)
 {
     // Dimensions originales
     const int largeur = rgba.largeur();
@@ -174,7 +174,7 @@ void prod_conv(LePNG & rgba, const Noyau & filtre)
     }
 
     // Remplir les marges de gauche et de droite
-    for (int i = 0; i < im_temp.hauteur(); ++i) {
+    for (png_uint_32 i = 0; i < im_temp.hauteur(); ++i) {
         for (int j = 0; j < marge; ++j) {
             im_temp[i * stride + (marge_gauche - 1 - j)] =
                 im_temp[i * stride + (marge_gauche + j)];

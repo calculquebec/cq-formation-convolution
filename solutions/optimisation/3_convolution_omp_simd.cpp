@@ -1,7 +1,6 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <mpi.h>
 #include <png.h>
 #include <string>
 #include <vector>
@@ -132,31 +131,26 @@ private:
  * Produit de convolution - écrase l'image originale
  * https://fr.wikipedia.org/wiki/Produit_de_convolution
  */
-static void prod_conv(LePNG & rgba, const Noyau & filtre, int rank, int size)
+static void prod_conv(LePNG & rgba, const Noyau & filtre)
 {
     // Dimensions originales
     const int largeur = rgba.largeur();
     const int hauteur = rgba.hauteur();
-    if (rank == 0)
-        std::cout << "Dimensions de l'image originale : " << largeur
-            << " x " << hauteur << std::endl;
+    std::cout << "Dimensions de l'image originale : " << largeur
+        << " x " << hauteur << std::endl;
 
     // Calculer la marge autour de l'image
     const int taille_filtre = filtre.largeur();
     const int marge = (int)taille_filtre / 2;  // Type int (signé) nécessaire
-    if (rank == 0) {
-        std::cout << "Taille du filtre : " << taille_filtre << std::endl;
-        std::cout << "  Marge réelle :  " << marge << std::endl;
-    }
+    std::cout << "Taille du filtre : " << taille_filtre << std::endl;
+    std::cout << "  Marge réelle :  " << marge << std::endl;
 
     const int marge_gauche = (marge + 15) & ~15;  // Alignée sur 64o=16*4o
     const int stride = marge_gauche + ((largeur + marge + 15) & ~15);
-    if (rank == 0) {
-        std::cout << "  Marge alignée : " << marge_gauche << std::endl;
-        std::cout << "  Largeur totale alignée : " << stride
-            << " (= " << marge_gauche << " + " << largeur << " + "
-            << stride - (marge_gauche + largeur) << ")" << std::endl;
-    }
+    std::cout << "  Marge alignée : " << marge_gauche << std::endl;
+    std::cout << "  Largeur totale alignée : " << stride
+        << " (= " << marge_gauche << " + " << largeur << " + "
+        << stride - (marge_gauche + largeur) << ")" << std::endl;
 
     LePNG im_temp;
     im_temp.redimensionner(stride, marge + hauteur + marge);
@@ -189,29 +183,33 @@ static void prod_conv(LePNG & rgba, const Noyau & filtre, int rank, int size)
         }
     }
 
-    if (rank == 0)
-        std::cout << "Filtrage en cours ..." << std::endl;
+    std::cout << "Filtrage en cours ..." << std::endl;
 
-    int debut = rank * hauteur / size;
-    int fin = (rank + 1) * hauteur / size;
+    struct soa {
+        std::vector<double> r, g, b;
+        soa(size_t size) : r(size), g(size), b(size) {}; 
+    } dim_temp(im_temp.size());
+    for(png_uint_32 i = 0; i < im_temp.size(); i++) {
+        dim_temp.r[i] = double(im_temp[i].r);
+        dim_temp.g[i] = double(im_temp[i].g);
+        dim_temp.b[i] = double(im_temp[i].b);
+    }
 
     // Prod_conv[i, j] = Sum_ii(Sum_jj(Im[i+ii, j+jj] * Filtre[-ii, -jj]))
-    for (int i = debut; i < fin; ++i) {
+    for (int i = 0; i < hauteur; ++i) {
         for (int j = 0; j < largeur; ++j) {
             double r = 0.;
             double g = 0.;
             double b = 0.;
 
             for (int ii = -marge; ii <= marge; ++ii) {
+                const LePNG::size_type index_im = (marge + i + ii) * stride + (marge_gauche + j);
+                const Noyau::size_type index_filt = (marge - ii) * taille_filtre + marge;
+#pragma omp simd reduction(+:r,g,b)
                 for (int jj = -marge; jj <= marge; ++jj) {
-                    const LePNG::size_type index_im =
-                        (marge + i + ii) * stride + (marge_gauche + j + jj);
-                    const Noyau::size_type index_filt =
-                        (marge - ii) * taille_filtre + (marge - jj);
-
-                    r += (double)im_temp[index_im].r * filtre[index_filt];
-                    g += (double)im_temp[index_im].g * filtre[index_filt];
-                    b += (double)im_temp[index_im].b * filtre[index_filt];
+                    r += dim_temp.r[index_im + jj] * filtre[index_filt - jj];
+                    g += dim_temp.g[index_im + jj] * filtre[index_filt - jj];
+                    b += dim_temp.b[index_im + jj] * filtre[index_filt - jj];
                 }
             }
 
@@ -226,24 +224,6 @@ static void prod_conv(LePNG & rgba, const Noyau & filtre, int rank, int size)
             rgba[i * largeur + j].b = b;
         }
     }
-
-    if (rank == 0) {
-        MPI_Status etat;
-
-        for (int r = 1; r < size; ++r) {
-            debut = r * hauteur / size;
-            fin = (r + 1) * hauteur / size;
-
-            MPI_Recv(&rgba[debut * largeur],
-                (fin - debut) * largeur * sizeof(png_rgba),
-                MPI_BYTE, r, 456, MPI_COMM_WORLD, &etat);
-        }
-    }
-    else {
-        MPI_Send(&rgba[debut * largeur],
-            (fin - debut) * largeur * sizeof(png_rgba),
-            MPI_BYTE, 0, 456, MPI_COMM_WORLD);
-    }
 }
 
 
@@ -252,20 +232,13 @@ static void prod_conv(LePNG & rgba, const Noyau & filtre, int rank, int size)
  */
 int main(int argc, char *argv[])
 {
-    MPI_Init(&argc, &argv);
-
-    int rank = 0, size = 1;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
     LePNG png;
     Noyau noyau;
 
     if (argc < 3) {
-        if (rank == 0)
-            std::cerr << "Utilisation: " << argv[0]
-                << " image.png fichier_noyau [resultat.png]" << std::endl;
-        return MPI_Abort(MPI_COMM_WORLD, 1);
+        std::cerr << "Utilisation: " << argv[0]
+            << " image.png fichier_noyau [resultat.png]" << std::endl;
+        return 1;
     }
 
     try {
@@ -274,9 +247,8 @@ int main(int argc, char *argv[])
         png.charger(nom_fichier_png);
     }
     catch (const std::string message) {
-        if (rank == 0)
-            std::cerr << "Erreur: " << message << std::endl;
-        return MPI_Abort(MPI_COMM_WORLD, 2);
+        std::cerr << "Erreur: " << message << std::endl;
+        return 2;
     }
 
     try {
@@ -285,31 +257,26 @@ int main(int argc, char *argv[])
         noyau.charger(nom_fichier_noyau);
     }
     catch (const std::string message) {
-        if (rank == 0)
-            std::cerr << "Erreur: " << message << std::endl;
-        return MPI_Abort(MPI_COMM_WORLD, 3);
+        std::cerr << "Erreur: " << message << std::endl;
+        return 3;
     }
 
     // Calcul principal
-    prod_conv(png, noyau, rank, size);
+    prod_conv(png, noyau);
 
     try {
-        if (rank == 0) {
-            // Enregistrer le résultat
-            std::string fichier_resultat =
-                (argc >= 4) ? argv[3] : "resultat.png";
-            png.enregistrer(fichier_resultat);
+        // Enregistrer le résultat
+        std::string fichier_resultat = (argc >= 4) ? argv[3] : "resultat.png";
+        png.enregistrer(fichier_resultat);
 
-            std::cout << "L'image a été filtrée et enregistrée dans "
-                << fichier_resultat << " avec succès!" << std::endl;
-        }
+        std::cout << "L'image a été filtrée et enregistrée dans "
+            << fichier_resultat << " avec succès!" << std::endl;
     }
     catch (const std::string message) {
         std::cerr << "Erreur: " << message << std::endl;
-        return  MPI_Abort(MPI_COMM_WORLD, 4);
+        return 4;
     }
 
-    MPI_Finalize();
     return 0;
 }
 

@@ -1,8 +1,8 @@
 EXECUTABLE=convolution
 
 CC=mpic++
-CFLAGS=-O3 -std=c++11
-DEBUG=-g -Wall
+CFLAGS=-O3 -std=c++11 -Wall
+DEBUG=-g
 LIBS=-lpng
 
 all: $(EXECUTABLE)
