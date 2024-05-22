@@ -82,8 +82,8 @@ def prod_conv(image, filtre, val_min: int = 0, val_max: int = 255):
         image[-marge:, :, :]
 
     # Remplir les marges de gauche et de droite
-    im_temp[:, marge - 1:0:-1, :] = \
-        im_temp[:, marge:marge + marge - 1, :]
+    im_temp[:, marge - 1::-1, :] = \
+        im_temp[:, marge:marge + marge, :]
     im_temp[:, marge + largeur:marge + largeur + marge, :] = \
         im_temp[:, marge+largeur-1:largeur-1:-1, :]
 
