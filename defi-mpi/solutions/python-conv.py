@@ -46,9 +46,10 @@ def prod_conv(image, filtre, comm, val_min: int = 0, val_max: int = 255):
     https://fr.wikipedia.org/wiki/Produit_de_convolution
     """
 
-    rank, size = comm.Get_rank(), comm.Get_size()
+    rank, nranks = comm.Get_rank(), comm.Get_size()
 
-    # Préparer le filtre pour le produit de convolution
+    # Tourner le filtre pour que la convolution soit une corrélation croisée
+    # https://en.wikipedia.org/wiki/Cross-correlation
     assert filtre.shape[0] == filtre.shape[1], "Le filtre n'est pas carré."
     filtre = filtre[::-1, ::-1].copy()
 
@@ -56,62 +57,47 @@ def prod_conv(image, filtre, comm, val_min: int = 0, val_max: int = 255):
     taille_filtre = filtre.shape[0]
     marge = taille_filtre // 2  # Division entière
 
-    if rank == 0:
-        print('Taille du filtre :', filtre.shape)
-        print('  Strides (octets) :', filtre.strides)
-        print('  Marge : ', marge)
-
     # Créer une image temporaire avec les marges
     hauteur, largeur, canaux = image.shape
-    stride = marge + largeur + marge
     im_temp = np.ndarray(
-        (marge + hauteur + marge, stride, canaux), dtype=image.dtype)
-
-    if rank == 0:
-        print("Dimensions de l'image originale :", image.shape)
-        print('  Strides (octets) :', image.strides)
-        print(f'  Largeur totale : {stride} (= {marge} +' +
-            f' {largeur} + {stride - (marge + largeur)})')
-        print('Dimensions modifiées :', im_temp.shape)
-        print('  Strides (octets) :', im_temp.strides)
-
-    # Remplir la marge du haut avec effet miroir vertical
-    im_temp[marge - 1::-1, marge:marge + largeur, :] = \
-        image[:marge, :, :]
+        (
+            marge + hauteur + marge,
+            marge + largeur + marge,
+            canaux
+        ),
+        dtype=image.dtype
+    )
 
     # Copier l'image originale en tenant compte des marges
-    im_temp[marge:-marge, marge:marge + largeur, :] = image
+    im_temp[marge:-marge, marge:-marge, :] = image
 
-    # Remplir la marge du bas avec effet miroir vertical
-    im_temp[-1:-1 - marge:-1, marge:marge + largeur, :] = \
-        image[-marge:, :, :]
+    # Remplir les marges du haut et du bas avec un effet miroir vertical
+    im_temp[0:marge, marge:-marge, :] = image[0:marge, :, :][::-1, :, :]
+    im_temp[-marge:, marge:-marge, :] = image[-marge:, :, :][::-1, :, :]
 
-    # Remplir les marges de gauche et de droite
-    im_temp[:, marge - 1::-1, :] = \
-        im_temp[:, marge:marge + marge, :]
-    im_temp[:, marge + largeur:marge + largeur + marge, :] = \
-        im_temp[:, marge+largeur-1:largeur-1:-1, :]
+    # Remplir les marges de gauche et de droite avec l'effet miroir horizontal
+    im_temp[:, 0:marge, :] = im_temp[:, marge:marge * 2, :][:, ::-1, :]
+    im_temp[:, -marge:, :] = im_temp[:, -2*marge:-marge, :][:, ::-1, :]
 
-    if rank == 0:
-        print('Filtrage en cours ...')
+    debut = rank * hauteur // nranks
+    fin = (rank + 1) * hauteur // nranks
 
-    debut = rank * hauteur // size
-    fin = (rank + 1) * hauteur // size
-
-    # Prod_conv[i, j] = Sum(Im[i+marge ±marge, j+marge ±marge] * Filtre)
+    # Prod_conv[i, j] = Sum(Im[marge + i ± marge, marge + j ± marge] * Filtre)
     for i in range(debut, fin):
         for j in range(largeur):
-            ii, jj = i + marge, j + marge
+            ii, jj = (marge + i), (marge + j)  # Coordonnées im_temp
+
             for k in range(canaux):
                 image[i, j, k] = np.vdot(
                     im_temp[ii-marge:ii+marge + 1, jj-marge:jj+marge + 1, k],
-                    filtre)
+                    filtre
+                )
 
     # Récupération des données
     if rank == 0:
-        for r in range(1, size):
-            debut = r * hauteur // size
-            fin = (r + 1) * hauteur // size
+        for r in range(1, nranks):
+            debut = r * hauteur // nranks
+            fin = (r + 1) * hauteur // nranks
             image[debut:fin, :, :] = comm.recv(source=r, tag=456)
 
         image.clip(val_min, val_max, out=image)
@@ -151,13 +137,17 @@ def main():
             sys.exit(None)
 
     # Calcul principal
+    if rank == 0:
+        print(f"Dimensions de l'image: {image.shape[:2]}")
+        print(f"Dimensions du noyau:   {noyau.shape}")
     prod_conv(image, noyau, comm)
 
     try:
         if rank == 0:
             # Enregistrer l'image résultante
-            rgb = Image.fromarray(image.astype(np.uint8), 'RGB')
-            rgb.save(fichier_resultat)
+            image_finale = Image.fromarray(image.astype(np.uint8), 'RGB')
+            image_finale.save(fichier_resultat)
+            print(f"Image enregistrée dans {fichier_resultat}")
     except Exception as e:
         if rank == 0:
             sys.exit(f'Erreur: {e}')
